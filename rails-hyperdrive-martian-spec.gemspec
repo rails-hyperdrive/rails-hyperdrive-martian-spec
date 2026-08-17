@@ -30,6 +30,8 @@ Gem::Specification.new do |spec|
 
   spec.files = Dir[
     "lib/**/*",
+    "skills/**/*",
+    "hyperdrive.yml",
     "LICENSE.txt",
     "README.md",
     "CHANGELOG.md"

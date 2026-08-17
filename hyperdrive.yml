@@ -1,0 +1,4 @@
+gem: rspec-rails
+versions:
+  - ">= 6.0"
+  - "< 9.0"

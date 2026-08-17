@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Migrated to the rails-hyperdrive 0.5.0 companion contract. The `martian-spec`
+  skill moved from `lib/rails-hyperdrive-martian-spec/hyperdrive/skills/` to the
+  top-level `skills/` root, and its `gem:`/`versions:` gating moved out of
+  SKILL.md frontmatter into a new gem-root `hyperdrive.yml` (still targeting
+  `rspec-rails`, `>= 6.0`, `< 9.0`). No behavior change for consuming apps.
 - Renamed the gem from `rails-hyperdrive-rspec` to `rails-hyperdrive-martian-spec`.
   The `RailsHyperdriveRspec` module is now `RailsHyperdriveMartianSpec` and the
   entrypoint is `require "rails-hyperdrive-martian-spec"`. `rails-hyperdrive-rspec`

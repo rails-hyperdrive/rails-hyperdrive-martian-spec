@@ -1,9 +1,5 @@
 ---
 name: martian-spec
-gem: rspec-rails
-versions:
-  - ">= 6.0"
-  - "< 9.0"
 description: "Writing and reviewing RSpec tests in Rails projects. Use when (1) implementing a new feature or fixing a bug in a Rails app -- the specs that come with it are part of the change, (2) creating new spec files or adjusting existing ones, (3) reviewing test code for anti-patterns, (4) optimizing slow tests, factory performance, or CI queue time, (5) debugging flaky or order-dependent specs. MUST use when working with let_it_be, before_all, factory_bot, spec file organization, or service/model/controller/job spec layer decisions. Covers: RSpec, test-prof, factory_bot, spec layering, CI performance."
 ---
 
