@@ -7,12 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `Rakefile` wiring rails-hyperdrive's author-side checks
+  (`rake hyperdrive:manifest:check`, `rake hyperdrive:skills:check`) and a CI
+  workflow running them, following rails-hyperdrive-layered-rails.
+  `rails-hyperdrive` and `rake` are development-only Gemfile dependencies.
+
 ### Changed
-- Migrated to the rails-hyperdrive 0.5.0 companion contract. The `martian-spec`
+- Migrated to the rails-hyperdrive 0.8.0 companion contract. The `martian-spec`
   skill moved from `lib/rails-hyperdrive-martian-spec/hyperdrive/skills/` to the
-  top-level `skills/` root, and its `gem:`/`versions:` gating moved out of
-  SKILL.md frontmatter into a new gem-root `hyperdrive.yml` (still targeting
-  `rspec-rails`, `>= 6.0`, `< 9.0`). No behavior change for consuming apps.
+  top-level `skills/` root; its `gem:`/`versions:` frontmatter gating moved into
+  a gem-root `hyperdrive.yml` in the current schema, where the requirement rides
+  on the target member (`gems: [rspec-rails: ">= 6.0, < 9.0"]` — the `versions:`
+  key is retired). Gemspec discovery metadata keys renamed from
+  `rails_hyperdrive_targets` / `rails_hyperdrive_artifacts` to
+  `hyperdrive_targets` / `hyperdrive_artifacts`, the keys `hyperdrive:discover`
+  reads since rails-hyperdrive 0.6. No behavior change for consuming apps.
 - Renamed the gem from `rails-hyperdrive-rspec` to `rails-hyperdrive-martian-spec`.
   The `RailsHyperdriveRspec` module is now `RailsHyperdriveMartianSpec` and the
   entrypoint is `require "rails-hyperdrive-martian-spec"`. `rails-hyperdrive-rspec`

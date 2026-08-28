@@ -1,6 +1,6 @@
 # rails-hyperdrive-martian-spec
 
-Companion gem for [rails-hyperdrive](https://github.com/Bakaface/rails-hyperdrive) — ships an `martian-spec` skill for AI coding agents working with RSpec in Rails projects.
+Companion gem for [rails-hyperdrive](https://github.com/rails-hyperdrive/rails-hyperdrive) — ships the `martian-spec` skill for AI coding agents working with RSpec in Rails projects.
 
 ## Install
 
