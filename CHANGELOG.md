@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-01
+
+### Fixed
+- Profiler slash commands are gated on both rspec-rails and test-prof. A
+  per-entry `gem:` in the manifest replaces the gem-wide rspec-rails gate, so
+  the seven profiler commands used to install into bundles that had test-prof
+  but no rspec-rails. 0.3.0 was tagged but never published to rubygems.
+
 ## [0.3.0] - 2026-09-01
 
 ### Added
@@ -78,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `martian-spec` skill description: also triggers when implementing a new
   feature or fixing a bug, not only when touching spec files directly.
 
-[Unreleased]: https://github.com/izhanov/rails-hyperdrive-martian-spec/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/izhanov/rails-hyperdrive-martian-spec/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/izhanov/rails-hyperdrive-martian-spec/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/izhanov/rails-hyperdrive-martian-spec/releases/tag/v0.3.0
 [0.2.0]: https://github.com/izhanov/rails-hyperdrive-martian-spec/releases/tag/v0.2.0
