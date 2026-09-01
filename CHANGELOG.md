@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-01
+
 ### Added
 - Slash commands as a second artifact kind, installed into `.claude/commands/`:
   seven test-prof profilers (`/fprof`, `/event-prof`, `/rd-prof`, `/tps-prof`,
@@ -76,5 +78,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `martian-spec` skill description: also triggers when implementing a new
   feature or fixing a bug, not only when touching spec files directly.
 
-[Unreleased]: https://github.com/izhanov/rails-hyperdrive-martian-spec/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/izhanov/rails-hyperdrive-martian-spec/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/izhanov/rails-hyperdrive-martian-spec/releases/tag/v0.3.0
 [0.2.0]: https://github.com/izhanov/rails-hyperdrive-martian-spec/releases/tag/v0.2.0
