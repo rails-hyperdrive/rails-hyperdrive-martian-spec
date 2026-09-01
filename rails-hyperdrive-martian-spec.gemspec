@@ -23,10 +23,11 @@ Gem::Specification.new do |spec|
   spec.metadata["rubygems_mfa_required"] = "true"
 
   spec.metadata["hyperdrive_targets"]   = "rspec-rails"
-  spec.metadata["hyperdrive_artifacts"] = "skill"
+  spec.metadata["hyperdrive_artifacts"] = "skill,command"
 
   spec.files = Dir[
     "lib/**/*",
+    "commands/**/*",
     "hyperdrive.yml",
     "LICENSE.txt",
     "README.md",

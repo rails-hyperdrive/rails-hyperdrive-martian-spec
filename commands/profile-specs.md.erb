@@ -1,0 +1,65 @@
+---
+description: Profile RSpec files to find where the time goes (factories, SQL, setup)
+argument-hint: <spec file or directory>
+---
+
+Profile the specs at `$ARGUMENTS` and report where the time goes. If no path
+was given, ask for one — profiling the whole suite drowns the signal in noise.
+
+Usage examples:
+
+```
+/profile-specs spec/models/user_spec.rb
+/profile-specs spec/services/
+```
+
+Run the steps in order and interpret each result before moving to the next.
+<%- if gem?("test-prof") -%>
+
+1. **Find the slowest examples**: `bundle exec rspec --profile 10 $ARGUMENTS`.
+   If the top entries share one feature (e.g. all touch password hashing),
+   suspect expensive global setup, not factories.
+2. **Count factory runs**: `FPROF=1 bundle exec rspec $ARGUMENTS`.
+   `total` ≫ `top-level` for a factory means a cascade — associations or
+   traits creating records the specs never asked for.
+3. **Measure SQL share**: `EVENT_PROF='sql.active_record' bundle exec rspec $ARGUMENTS`.
+   If SQL is a small fraction of total time, don't chase N+1s — look at
+   factories and hooks instead.
+4. **Split hook time from example time**: `RD_PROF=1 bundle exec rspec $ARGUMENTS`.
+   Heavy `before`-hook time with light example bodies points at setup that
+   should be shared (`let_it_be` / `before_all`).
+
+The full flag-by-flag cheat-sheet (including `TPS_PROF`, `TEST_MEM_PROF`,
+`TEST_STACK_PROF`) lives in the `martian-spec` skill's
+`references/profiling.md`.
+<%- end -%>
+<%- if !gem?("test-prof") -%>
+
+1. **Find the slowest examples**: `bundle exec rspec --profile 10 $ARGUMENTS`.
+   If the top entries share one feature (e.g. all touch password hashing),
+   suspect expensive global setup, not factories.
+2. **Count factory runs** with a temporary `ActiveSupport::Notifications`
+   subscriber in `spec/rails_helper.rb` (remove it after diagnosing):
+
+   ```ruby
+   counts = Hash.new(0)
+   ActiveSupport::Notifications.subscribe("factory_bot.run_factory") do |_, _, _, _, payload|
+     counts[[payload[:name], payload[:strategy]]] += 1
+   end
+   at_exit { counts.sort_by { |_, n| -n }.first(20).each { |k, n| puts "#{n}\t#{k.join(" ")}" } }
+   ```
+
+   A factory with a high count that the file never calls explicitly is a
+   cascade — associations or traits creating records the specs never asked for.
+
+This project does not use test-prof, which packages these diagnostics as
+one-env-var profilers (`FPROF=1`, `EVENT_PROF=...`) and adds `let_it_be` /
+`before_all` to fix what they find. Suggest adding it — don't add it silently:
+
+```sh
+bundle add test-prof --group test
+```
+<%- end -%>
+
+Finish with a short report: the top time sinks, whether the bottleneck is
+factories, SQL, hooks, or example bodies, and the single highest-leverage fix.

@@ -2,7 +2,7 @@
 
 Within each `describe`/`context` block, declarations follow this order:
 
-1. `subject`
+1. `subject` — named (`subject(:result) { ... }`) whenever examples reference it; bare only for `is_expected` one-liners
 2. `let_it_be` — static data (created once)
 3. `let` / `let!` — per-context overrides
 4. `before_all` — static setup (no mocks)
@@ -12,7 +12,7 @@ Within each `describe`/`context` block, declarations follow this order:
 
 ```ruby
 RSpec.describe MyService, type: :service do
-  subject { described_class.call(user: user, params: params) }
+  subject(:result) { described_class.call(user: user, params: params) }
 
   # 1. Static data (let_it_be)
   let_it_be(:user) { create(:user) }
@@ -33,8 +33,7 @@ RSpec.describe MyService, type: :service do
 
   # 5. Tests
   it "does the thing" do
-    subject
-    expect(...).to ...
+    expect(result).to ...
   end
 
   context "when condition varies" do

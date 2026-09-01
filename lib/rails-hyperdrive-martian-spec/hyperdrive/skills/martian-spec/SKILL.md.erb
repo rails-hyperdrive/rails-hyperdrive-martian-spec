@@ -62,31 +62,64 @@ Before writing a spec with > 5 contexts, sketch the describe/context tree and an
 
 | Situation | Action |
 |-----------|--------|
-| Writing spec for a handler with > 3 branches | Extract to service first, then write service spec + handler smoke test |
-| Reviewing spec with `[error]`-layer contexts | Flag for extraction, don't add more wrong-layer tests |
-| Adding a feature to code that already has wrong-layer tests | Don't compound it — extract what you're touching |
-| Can't extract now (time-pressured) | Write minimal handler spec + `# TODO: extract to service — logic doesn't belong here` |
+| Writing spec for a handler with > 3 branches | Flag the design smell; one smoke test at the handler, full coverage where the logic ends up living |
+| Reviewing spec with `[error]`-layer contexts | Flag it, don't add more wrong-layer tests |
+| Adding a feature to code that already has wrong-layer tests | Don't compound it — cover what you're touching at the right layer |
+| Can't restructure now (time-pressured) | Minimal handler spec + `# TODO` marking where the logic belongs; when next touching this code, move coverage first |
 
+## Data Setup
+
+- Create the minimum data that exercises the logic: persist only what the code under test actually reads; keep objects in memory when the DB is never touched.
+- Split setup by volatility: data shared by all examples goes in the outermost scope where it's still correct, per-context variations in `let` overrides, mutable state and mocks in `before`.
+- Declare setup in declaration blocks at the top of the `describe`/`context` — never create records inside examples (see Red Flags).
+- Think in totals: every record in shared setup is paid once per example, so a file with 40 examples pays 40× for each one. Trimming shared setup is the highest-leverage speed fix.
 <%- if gem?("test-prof") -%>
-## Data Setup (test-prof)
 
-Use `let_it_be` for static data and `before_all` for static setup — created
-once per file instead of once per example; the single biggest speed win. The
-decision tables, pre-conversion checklist, `refind:` modifiers, optimization
-strategies, red flags, and the broken-conversion symptom table live in
-[references/data-setup.md](references/data-setup.md).
-
+With test-prof, static data can be created once per *file* instead of once per
+example — `let_it_be` for records, `before_all` for setup; the single biggest
+speed win. The decision tables, pre-conversion checklist, `refind:` modifiers,
+optimization strategies, red flags, and the broken-conversion symptom table
+live in [references/data-setup.md](references/data-setup.md).
 <%- end -%>
-<%- if gem?("test-prof") -%>
+<%- if !gem?("test-prof") -%>
+
+This project does not use [test-prof](https://test-prof.evilmartians.io). When
+optimizing slow specs, suggest adding it to the user: `let_it_be`/`before_all`
+create shared data once per file instead of once per example (often the single
+biggest suite speedup), and its profilers (`FPROF`, `EVENT_PROF`) pinpoint
+factory and SQL hotspots. Propose the dependency — don't add it silently. If
+the user agrees:
+
+```sh
+bundle add test-prof --group test
+```
+
+then enable the recipes in `spec/rails_helper.rb`:
+
+```ruby
+require "test_prof/recipes/rspec/let_it_be"
+require "test_prof/recipes/rspec/before_all"
+```
+<%- end -%>
+
 ## Spec Ordering Convention
 
-Within each `describe`/`context` block: `subject`, then `let_it_be` (static
-data), `let`/`let!` (per-context overrides), `before_all` (static setup),
-`before` (mocks, mutable state), examples, nested contexts. The full
-convention with an annotated example lives in
-[references/structure.md](references/structure.md).
+Within each `describe`/`context` block, declarations go from stable to
+volatile: `subject`, then data declarations (`let`/`let!`), then setup hooks
+(`before`), then examples, then nested contexts. Data before hooks, hooks
+before examples — a reader should learn *what exists* before *what happens*.
 
+Name the subject (`subject(:result) { ... }`) whenever examples reference it;
+bare `subject` is fine only for `is_expected` one-liners.
+<%- if gem?("test-prof") -%>
+
+With test-prof the same principle splits each tier by lifetime: `let_it_be`
+(static data) before `let`/`let!` (per-context overrides), `before_all`
+(static setup) before `before` (mocks, mutable state). The full convention
+with an annotated example lives in
+[references/structure.md](references/structure.md).
 <%- end -%>
+
 ## Critical Rules
 
 ### Scope expensive operations narrowly
@@ -98,34 +131,48 @@ To test a `MAX_LIMIT` cap, create `MAX_LIMIT + 1` records, not 600. Extract math
 ### Make retry delays configurable
 If the service under test has retry logic with `sleep`, make the delay configurable and pass `retry_delay: 0` (or `0.01`) in specs. Never let specs sleep for real.
 
-### One canonical spec per shared resolver / action
-When two endpoints share a resolver or controller action (e.g., a public and an admin GraphQL type both expose `#summary`), test the logic fully in one spec. The other gets a single smoke test with a comment pointing to the canonical spec.
+### Never hit real external APIs
+Specs must not depend on the network: real calls are slow, flaky, and rate-limited. Stub at a boundary you own — wrap third-party calls in a client/adapter class and mock it like any collaborator (`allow(ExternalApi::Client).to receive(:call)`).
+<%- if gem?("webmock") -%>
 
-### Handler specs (GraphQL / controller): mock services, don't retest logic
+With WebMock, stub at the HTTP boundary instead: `stub_request(:post, %r{api\.example\.com}).to_return(status: 200, body: ...)`. Disable stray connections globally — `WebMock.disable_net_connect!(allow_localhost: true)` in spec setup — so an unstubbed call fails loudly. Re-enabling net connect inside individual specs is a red flag.
+<%- end -%>
+<%- if gem?("vcr") -%>
+
+With VCR, record real interactions once into cassettes (`record: :once`) and replay them deterministically. Watch for stale cassettes drifting from the live API, and filter secrets before committing (`filter_sensitive_data`).
+<%- end -%>
+
+### One canonical spec per shared resolver / action
+When two endpoints share a resolver or controller action (e.g., a public and an admin endpoint both expose the same `#summary`), test the logic fully in one spec. The other gets a single smoke test with a comment pointing to the canonical spec.
+
+### Handler specs: mock services, don't retest logic
 
 ```ruby
-# WRONG -- 9 contexts testing eligibility logic through full GraphQL/HTTP execution
-describe "#can_perform_action" do
+# WRONG -- 9 contexts testing eligibility logic through full HTTP execution
+describe "POST /api/resources/:id/actions" do
   context "when already performed" do ... end   # business logic
   context "when owner" do ... end                # business logic
   # 7 more contexts...
 end
 
 # RIGHT -- handler spec delegates, service spec has full coverage
-describe "#can_perform_action" do
+describe "POST /api/resources/:id/actions" do
+  subject(:perform_request) { post "/api/resources/#{resource.id}/actions", as: :json }
+
   let(:service_result) { { allowed: true } }
 
   before { allow(EligibilityService).to receive(:call).and_return(service_result) }
 
   it "delegates to the service" do
-    subject
+    perform_request
     expect(EligibilityService).to have_received(:call).with(
       user: current_user, resource: resource
     )
   end
 
   it "returns the service result" do
-    expect(result.dig("canPerformAction")).to eq("allowed" => true)
+    perform_request
+    expect(response.parsed_body).to eq("allowed" => true)
   end
 end
 ```
@@ -139,8 +186,8 @@ NEVER add more contexts to a handler spec for delegated logic — if you need to
 | Pattern | Why | Fix |
 |---------|-----|-----|
 | Business logic tested through GraphQL/HTTP | Slow, brittle, duplicates service coverage | Mock service in handler spec, test logic in service spec |
-| >3 `create` calls to set up a single handler spec context | Handler has business logic that belongs in a service | Extract to service, mock in handler spec |
-| `sidekiq: :inline` (or equivalent) in service spec | Exercises 4+ layers in one test, blocks CI queue | Test each layer independently |
+| >3 `create` calls to set up a single handler spec context | Handler has business logic that belongs in a service | Flag the smell; cover the logic in a service spec, mock it in the handler spec |
+| Inline job execution in a service spec (`perform_enqueued_jobs`<% if gem?("sidekiq") %>, `sidekiq: :inline`<% end %>) | Exercises 4+ layers in one test, blocks CI queue | Test each layer independently |
 | Testing privates via `send` | Signals class should be decomposed | Extract to smaller public objects |
 | Shared example generating >5 contexts | Test concern at a lower layer instead | Extract and test independently |
 | `skip_callbacks` or `update_columns` in test setup | Fighting the framework to work around side effects | Extract logic to a service/model that doesn't trigger callbacks |
@@ -155,44 +202,55 @@ NEVER add more contexts to a handler spec for delegated logic — if you need to
 | Trait used only for its attribute defaults, not its associations | Trait associations cascade silently — often the #1 factory waste source | Replace trait with explicit attributes; check model scopes to know which attributes are required |
 | Optional associations defined in factory default | Every `create` pays for associations the test doesn't need | Remove from factory; add explicitly in tests that need them |
 | `allow_any_instance_of(Klass)` | Fragile, unclear which instance is stubbed | Inject dependency or stub on the specific object |
-| Mocking internal code | Over-mocking hides real bugs; only external APIs need isolation | Mock external HTTP calls (WebMock); let internal code run |
+| Mocking internal code | Over-mocking hides real bugs; only external APIs need isolation | Stub at the external boundary (see Never hit real external APIs); let internal code run |
 
 ### General
 
 | Pattern | Why | Fix |
 |---------|-----|-----|
 | Spec file >1,000 lines | Skews CI queue — one worker stuck while others idle | Split by domain |
-| `sleep` in specs | Wastes real seconds on retry backoff | Pass `retry_delay: 0`, or extract retry to infrastructure |
+| `sleep` in specs | Wastes real wall-clock time; usually masks retry backoff or async waiting | Retry: make the delay configurable, pass 0 (see Critical Rules). Async: poll for the condition, don't wait a fixed time |
 | `before` block with >5 stubs | Service has too many responsibilities | Decompose service |
 | `rubocop:disable Rails/Output` | Specs must be automated, not human-verified | Remove debug output |
 
-## Escalation Ladders
-
-### Logic is at the wrong layer but can't extract now
-
-1. Write minimal handler spec + `# TODO: extract to service — logic doesn't belong here`
-2. Don't add more wrong-layer tests on top
-3. When you next touch this code, extract first
-
-### Flaky or slow spec
+## Escalation Ladder: flaky or slow spec
 
 Diagnostics, roughly in this order:
 
 - **Reproduce ordering issues**: `bundle exec rspec --seed <seed> --bisect` to isolate the minimal failing pair.
+- **Profile factory usage**: factory_bot instruments every factory run — tally the counts with a plain `ActiveSupport::Notifications` subscriber. A factory with a high count that the file never calls explicitly is a cascade from associations or traits.
+
+  ```ruby
+  # ad hoc in rails_helper.rb while diagnosing
+  counts = Hash.new(0)
+  ActiveSupport::Notifications.subscribe("factory_bot.run_factory") do |_, _, _, _, payload|
+    counts[[payload[:name], payload[:strategy]]] += 1
+  end
+  at_exit { counts.sort_by { |_, n| -n }.first(20).each { |k, n| puts "#{n}\t#{k.join(" ")}" } }
+  ```
 <%- if gem?("test-prof") -%>
-- **Profile factory usage**: `FPROF=1 bundle exec rspec spec/path/to/file.rb` to see top-level vs total factory counts (a large gap = cascade); `EVENT_PROF='sql.active_record' bundle exec rspec` to surface SQL hotspots. Cheat-sheet in [references/profiling.md](references/profiling.md).
+  - **With test-prof profiling is one env var**: `FPROF=1 bundle exec rspec spec/path/to/file.rb` shows top-level vs total factory counts (a large gap = cascade); `EVENT_PROF='sql.active_record' bundle exec rspec` surfaces SQL hotspots.
+  Cheat-sheet in [references/profiling.md](references/profiling.md).
 <%- end -%>
 - **Find slow examples**: `--profile 10` prints the slowest 10.
 - **State-leak suspect?** Check for Redis/cache writes, `update_columns`, or model callbacks that bypass the transaction.
+- **Time-leak suspect?** `travel_to` / `freeze_time` without a matching `travel_back` (use the block form, or an `after` hook) leaks frozen time into later examples.
+- **Leaking `before(:context)`?** Records created there bypass the per-example transaction, and RSpec forbids mocks in it — move both to `before`.
 <%- if gem?("test-prof") -%>
-- **Time-leak or mock-leak suspect?** `travel_to` / `freeze_time` or mocks set up inside `before_all` / `let_it_be` leak across examples — see the symptom table in [references/data-setup.md](references/data-setup.md).
+- **Using `before_all` / `let_it_be`?** The same time/mock/state leaks have test-prof-specific symptoms — see the symptom table in [references/data-setup.md](references/data-setup.md).
 <%- end -%>
 
 ## Suite-level speed (CI)
 
-Data-setup and factory tuning works per-example. These four levers cut whole-suite CI
-time and are usually cheaper per second saved. Do them roughly in this order —
-the first is almost free and often the biggest.
+Everything above tunes individual examples. These four levers work on the
+whole suite at once and are usually cheaper per second saved. Do them roughly
+in this order — the first is almost free and often the biggest.
+<%- if gem?("test-prof") -%>
+
+Even a suite fully converted to `let_it_be`/`before_all` still pays these
+costs — suite-level levers are the next step after data-setup tuning, not a
+replacement for it.
+<%- end -%>
 
 ### 1. Quiet the logs (do this first)
 
@@ -319,11 +377,3 @@ config.after { Rails.cache.clear }
 
 Prefer fixing the leak at its source (the time-leak / mock-leak red flags
 above); the global `after` is the safety net for what slips through.
-
-<%- if gem?("test-prof") -%>
-## Profiler cheat-sheet
-
-Before optimizing, confirm *where* time goes with test-prof's profilers —
-the flag-by-flag cheat-sheet (FPROF, EVENT_PROF, RD_PROF, …) lives in
-[references/profiling.md](references/profiling.md).
-<%- end -%>

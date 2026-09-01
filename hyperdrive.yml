@@ -6,3 +6,11 @@ skills:
       references/data-setup.md: { gem: test-prof }
       references/profiling.md: { gem: test-prof }
       references/structure.md: { gem: test-prof }
+commands:
+  fprof.md: { gem: test-prof }
+  event-prof.md: { gem: test-prof }
+  rd-prof.md: { gem: test-prof }
+  tps-prof.md: { gem: test-prof }
+  factory-default-prof.md: { gem: test-prof }
+  mem-prof.md: { gem: test-prof }
+  stack-prof.md: { gem: test-prof }
