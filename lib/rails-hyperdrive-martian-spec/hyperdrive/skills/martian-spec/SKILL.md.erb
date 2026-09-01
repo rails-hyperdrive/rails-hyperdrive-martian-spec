@@ -1,0 +1,329 @@
+---
+name: martian-spec
+description: Write, review, optimize, and debug RSpec specs in Rails projects. Use when implementing a feature or fixing a bug in a Rails app — the specs that come with it are part of the change; when creating new spec files or adjusting existing ones; when reviewing test code, PRs, or diffs for anti-patterns and wrong-layer tests; when optimizing slow tests or CI queue time; and when debugging flaky or order-dependent specs. Triggers on "flaky spec", "slow specs", "spec layer", "service/model/request spec", "handler spec", "spec review", "test setup", "test performance", "parallel CI", "test database setup", "RSpec best practices".
+allowed-tools:
+  - Grep
+  - Glob
+  - Read
+  - Edit
+  - Write
+  - Bash
+  - Task
+---
+
+# RSpec for Rails
+
+A skill for writing fast, well-layered, non-flaky RSpec specs in Rails projects.
+
+## Thinking Prompts
+
+Before writing a test context, ask yourself:
+
+- "Could I test this with a simpler object at a lower layer?" -- if yes, do that instead
+- "Am I creating records just to satisfy the entry point, not the logic?" -- wrong layer
+- "Would this test break if I changed the HTTP/GraphQL wrapper?" -- logic is too high
+- "Am I stubbing >3 collaborators just to isolate what I'm testing?" -- testing wiring, not behavior
+- "Is this setup expensive because the logic lives far from where I'm testing it?" -- push logic down
+
+When reviewing existing specs, scan for performance and layer issues:
+
+- "How many records are created per example vs per file?" -- the #1 speed lever
+<%- if gem?("test-prof") -%>
+- "Is there a `before` that could be `before_all`?" -- quick wins first
+<%- end -%>
+- "Are any traits used only for their attributes, not their associations?" -- trait cascades are the #1 hidden waste source
+- "Are any contexts testing a layer above where the logic lives?" -- structural issue, see Red Flags
+
+Then annotate contexts with `[ok]`/`[warning]`/`[error]`:
+
+- `[ok]` -- belongs in this layer
+- `[warning]` -- borderline, signals a design smell
+- `[error]` -- wrong layer, should be tested elsewhere
+
+If a handler (controller action, GraphQL resolver, job `perform`) has > 3 conditional branches (simple guards don't count), that logic is hard to cover at the handler layer -- flag it as a design smell. Don't compensate with a fat handler spec: keep one smoke test at the handler and put full coverage where the logic ends up living.
+
+Before writing a spec with > 5 contexts, sketch the describe/context tree and annotate each with `[ok]`/`[warning]`/`[error]`. If > 30% are `[warning]` or `[error]`, the code needs refactoring before it needs more tests.
+
+### Layer Selection
+
+| What you're testing | Spec layer | Subject pattern |
+|---------------------|------------|-----------------|
+| Business rule / computation | Service spec | `described_class.call(...)` |
+| DB scope / validation / callback | Model spec | `model.method` or `Model.scope` |
+<%- if gem?("graphql") -%>
+| GraphQL field (thin delegation) | Type spec | `MySchema.execute(query, ...)` |
+| GraphQL field with >3 branches | Service spec + type smoke test | Extract first |
+<%- end -%>
+| Background job execution | Job spec | `described_class.new.perform(...)` |
+| Job gets enqueued by caller | Caller's spec | <% if gem?("rspec-sidekiq") %>`have_enqueued_sidekiq_job` / <% end %>`have_enqueued_job` |
+| HTTP endpoint (REST API) | Request spec | `post "/api/path", params:, as: :json` |
+
+### When logic is already at the wrong layer
+
+| Situation | Action |
+|-----------|--------|
+| Writing spec for a handler with > 3 branches | Extract to service first, then write service spec + handler smoke test |
+| Reviewing spec with `[error]`-layer contexts | Flag for extraction, don't add more wrong-layer tests |
+| Adding a feature to code that already has wrong-layer tests | Don't compound it — extract what you're touching |
+| Can't extract now (time-pressured) | Write minimal handler spec + `# TODO: extract to service — logic doesn't belong here` |
+
+<%- if gem?("test-prof") -%>
+## Data Setup (test-prof)
+
+Use `let_it_be` for static data and `before_all` for static setup — created
+once per file instead of once per example; the single biggest speed win. The
+decision tables, pre-conversion checklist, `refind:` modifiers, optimization
+strategies, red flags, and the broken-conversion symptom table live in
+[references/data-setup.md](references/data-setup.md).
+
+<%- end -%>
+<%- if gem?("test-prof") -%>
+## Spec Ordering Convention
+
+Within each `describe`/`context` block: `subject`, then `let_it_be` (static
+data), `let`/`let!` (per-context overrides), `before_all` (static setup),
+`before` (mocks, mutable state), examples, nested contexts. The full
+convention with an annotated example lives in
+[references/structure.md](references/structure.md).
+
+<%- end -%>
+## Critical Rules
+
+### Scope expensive operations narrowly
+Materialized view refreshes, search index reindexing, external data syncs, file generation — scope these to only the contexts that need them. Don't pay the cost for every example.
+
+### Don't over-create records
+To test a `MAX_LIMIT` cap, create `MAX_LIMIT + 1` records, not 600. Extract math into a testable unit and test with plain numbers when possible.
+
+### Make retry delays configurable
+If the service under test has retry logic with `sleep`, make the delay configurable and pass `retry_delay: 0` (or `0.01`) in specs. Never let specs sleep for real.
+
+### One canonical spec per shared resolver / action
+When two endpoints share a resolver or controller action (e.g., a public and an admin GraphQL type both expose `#summary`), test the logic fully in one spec. The other gets a single smoke test with a comment pointing to the canonical spec.
+
+### Handler specs (GraphQL / controller): mock services, don't retest logic
+
+```ruby
+# WRONG -- 9 contexts testing eligibility logic through full GraphQL/HTTP execution
+describe "#can_perform_action" do
+  context "when already performed" do ... end   # business logic
+  context "when owner" do ... end                # business logic
+  # 7 more contexts...
+end
+
+# RIGHT -- handler spec delegates, service spec has full coverage
+describe "#can_perform_action" do
+  let(:service_result) { { allowed: true } }
+
+  before { allow(EligibilityService).to receive(:call).and_return(service_result) }
+
+  it "delegates to the service" do
+    subject
+    expect(EligibilityService).to have_received(:call).with(
+      user: current_user, resource: resource
+    )
+  end
+
+  it "returns the service result" do
+    expect(result.dig("canPerformAction")).to eq("allowed" => true)
+  end
+end
+```
+
+NEVER add more contexts to a handler spec for delegated logic — if you need to test different service inputs/outputs, those tests belong in the service spec.
+
+## Red Flags
+
+### Layer & coverage
+
+| Pattern | Why | Fix |
+|---------|-----|-----|
+| Business logic tested through GraphQL/HTTP | Slow, brittle, duplicates service coverage | Mock service in handler spec, test logic in service spec |
+| >3 `create` calls to set up a single handler spec context | Handler has business logic that belongs in a service | Extract to service, mock in handler spec |
+| `sidekiq: :inline` (or equivalent) in service spec | Exercises 4+ layers in one test, blocks CI queue | Test each layer independently |
+| Testing privates via `send` | Signals class should be decomposed | Extract to smaller public objects |
+| Shared example generating >5 contexts | Test concern at a lower layer instead | Extract and test independently |
+| `skip_callbacks` or `update_columns` in test setup | Fighting the framework to work around side effects | Extract logic to a service/model that doesn't trigger callbacks |
+
+### Factory & mock hygiene
+
+| Pattern | Why | Fix |
+|---------|-----|-----|
+| `create_list` with count >50 | Over-population for boundary test | Use threshold + 1, or test math separately |
+| `FactoryBot.create` inside `subject` or `it` block | Hides setup from the declaration block | Move to `let` / `before` declarations |
+| Factory implicitly creating association trees (cascade) | Every `create` spawns redundant records the test doesn't need | Inline associations in factory definitions or pass shared records explicitly |
+| Trait used only for its attribute defaults, not its associations | Trait associations cascade silently — often the #1 factory waste source | Replace trait with explicit attributes; check model scopes to know which attributes are required |
+| Optional associations defined in factory default | Every `create` pays for associations the test doesn't need | Remove from factory; add explicitly in tests that need them |
+| `allow_any_instance_of(Klass)` | Fragile, unclear which instance is stubbed | Inject dependency or stub on the specific object |
+| Mocking internal code | Over-mocking hides real bugs; only external APIs need isolation | Mock external HTTP calls (WebMock); let internal code run |
+
+### General
+
+| Pattern | Why | Fix |
+|---------|-----|-----|
+| Spec file >1,000 lines | Skews CI queue — one worker stuck while others idle | Split by domain |
+| `sleep` in specs | Wastes real seconds on retry backoff | Pass `retry_delay: 0`, or extract retry to infrastructure |
+| `before` block with >5 stubs | Service has too many responsibilities | Decompose service |
+| `rubocop:disable Rails/Output` | Specs must be automated, not human-verified | Remove debug output |
+
+## Escalation Ladders
+
+### Logic is at the wrong layer but can't extract now
+
+1. Write minimal handler spec + `# TODO: extract to service — logic doesn't belong here`
+2. Don't add more wrong-layer tests on top
+3. When you next touch this code, extract first
+
+### Flaky or slow spec
+
+Diagnostics, roughly in this order:
+
+- **Reproduce ordering issues**: `bundle exec rspec --seed <seed> --bisect` to isolate the minimal failing pair.
+<%- if gem?("test-prof") -%>
+- **Profile factory usage**: `FPROF=1 bundle exec rspec spec/path/to/file.rb` to see top-level vs total factory counts (a large gap = cascade); `EVENT_PROF='sql.active_record' bundle exec rspec` to surface SQL hotspots. Cheat-sheet in [references/profiling.md](references/profiling.md).
+<%- end -%>
+- **Find slow examples**: `--profile 10` prints the slowest 10.
+- **State-leak suspect?** Check for Redis/cache writes, `update_columns`, or model callbacks that bypass the transaction.
+<%- if gem?("test-prof") -%>
+- **Time-leak or mock-leak suspect?** `travel_to` / `freeze_time` or mocks set up inside `before_all` / `let_it_be` leak across examples — see the symptom table in [references/data-setup.md](references/data-setup.md).
+<%- end -%>
+
+## Suite-level speed (CI)
+
+Data-setup and factory tuning works per-example. These four levers cut whole-suite CI
+time and are usually cheaper per second saved. Do them roughly in this order —
+the first is almost free and often the biggest.
+
+### 1. Quiet the logs (do this first)
+
+The default test `log_level` is `:debug`, so every SQL statement is written to
+`log/test.log` — a suite emitting tens of thousands of queries pays real I/O for
+output nobody reads. In `config/environments/test.rb`:
+
+```ruby
+config.log_level = :fatal
+config.active_record.verbose_query_logs = false     # no per-query backtrace
+config.active_record.query_log_tags_enabled = false  # no SQL comment tagging
+```
+
+Usually the biggest cheap win in a suite that has never been tuned: in Evil
+Martians' write-up, quieting the verbose query logs together with a Sentry
+logger fix took a single-process run from ~25min to ~12min, with the query
+logging doing the heavy lifting. Costs nothing and never changes behavior.
+
+### 2. Weaken expensive global setup in test
+
+Cryptographic KDFs (Argon2id, bcrypt, scrypt, PBKDF2), blind indexes, and
+password hashing are CPU bottlenecks that dominate the *slowest examples* —
+they're designed to be slow. Use minimal cost in test only:
+
+```ruby
+# bcrypt
+BCrypt::Engine.cost = BCrypt::Engine::MIN_COST   # in test setup
+# Argon2 / custom KDF — expose t_cost/m_cost/p_cost as env-aware config and
+# use the cheapest params in test (e.g. t_cost: 1, tiny m_cost).
+```
+
+Find them: they're the top entries in `--profile`. If your slowest specs are all
+one crypto/auth feature, this is the fix, not factory work.
+
+### 3. Parallelize fairly (runner choice matters)
+
+Running across CPU cores is the biggest wall-clock lever once the above are done,
+but the runner matters:
+
+- **`parallel_tests`** splits *files* across processes up front (static). The
+  slowest file becomes the bottleneck and each worker boots the app separately.
+- **`test-queue`** (preferred) forks workers after one boot and hands out
+  examples from a shared queue — a free worker grabs the next spec, so slow
+  files can't strand a worker, and there's no per-worker re-boot. This is what
+  Rails' own Minitest `parallelize` does (fork + distribute), which is why a
+  Minitest suite often looks "faster" than a single-process RSpec — it's the
+  parallelism, not the framework.
+
+Give each worker its own database so workers never contend — but the setup
+differs by runner:
+
+- **`test-queue`** does NOT set `TEST_ENV_NUMBER` (its env vars, e.g.
+  `TEST_QUEUE_WORKERS`, control the queue, not worker identity) — it forks
+  after boot, so workers inherit the parent's DB connection. The stock
+  `rspec-queue` binary has no per-worker hooks; wire a custom runner and
+  reconnect in `after_fork`:
+
+  ```ruby
+  #!/usr/bin/env ruby
+  # bin/test-queue — run as: bin/test-queue spec
+  require "test_queue"
+  require "test_queue/runner/rspec"
+
+  class Runner < TestQueue::Runner::RSpec
+    def after_fork(num)
+      db = ActiveRecord::Base.connection_db_config.configuration_hash
+      ActiveRecord::Base.establish_connection(db.merge(database: "#{db[:database]}_#{num}"))
+    end
+  end
+
+  Runner.new.execute
+  ```
+
+  Create/load the per-worker schemas once in CI setup before the run.
+
+- **`parallel_tests`** sets `TEST_ENV_NUMBER` per process: suffix the database
+  name with it in `database.yml` (SQLite: one file per number), and create the
+  databases with `rake parallel:create parallel:load_schema`.
+
+On CI, know your core count first (GitHub-hosted **private** repos get 2 vCPUs,
+public get 4) — cache the runtime log for runtime-based balancing.
+
+**A fair queue exposes every latent isolation bug** — specs that only passed
+because another file ran first in the same process. This is a feature: it finds
+real order-dependence. When a spec fails only under parallelism, run it *alone*
+(`rspec path/to/x_spec.rb`) — if it fails there too, it's a self-sufficiency bug
+(a missing `require`/constant, or leaked global state), not the runner.
+
+### 4. Global failsafes for leaky state
+
+Under a fair runner, one leaked global crashes unrelated specs in other workers.
+Add belt-and-suspenders resets in `spec/rails_helper.rb`:
+
+```ruby
+config.after { travel_back }  # undo any stray travel_to/freeze_time
+# reset any singletons / global clients / thread-locals the app sets
+```
+
+Clearing the cache needs care under parallelism: with a shared store, one
+worker's `Rails.cache.clear` wipes every other worker's entries. Namespace the
+store per worker first, then clear.
+
+Only if the app uses `:redis_cache_store` (or any shared store) in test:
+
+```ruby
+# config/environments/test.rb
+config.cache_store = :redis_cache_store,
+  { namespace: "test#{ENV.fetch("TEST_ENV_NUMBER", "")}" }
+
+# spec/rails_helper.rb
+config.after { Rails.cache.clear }
+```
+
+Under `test-queue` nothing sets `TEST_ENV_NUMBER` — assign it in the custom
+runner's `after_fork` (`ENV["TEST_ENV_NUMBER"] = num.to_s`) so the same
+namespacing works there.
+
+Otherwise (`:null_store`/`:memory_store`, i.e. per-process) just:
+
+```ruby
+# spec/rails_helper.rb
+config.after { Rails.cache.clear }
+```
+
+Prefer fixing the leak at its source (the time-leak / mock-leak red flags
+above); the global `after` is the safety net for what slips through.
+
+<%- if gem?("test-prof") -%>
+## Profiler cheat-sheet
+
+Before optimizing, confirm *where* time goes with test-prof's profilers —
+the flag-by-flag cheat-sheet (FPROF, EVENT_PROF, RD_PROF, …) lives in
+[references/profiling.md](references/profiling.md).
+<%- end -%>

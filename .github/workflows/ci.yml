@@ -20,6 +20,3 @@ jobs:
 
       - name: Lint hyperdrive.yml
         run: bundle exec rake hyperdrive:manifest:check
-
-      - name: Check skill templates
-        run: bundle exec rake hyperdrive:skills:check

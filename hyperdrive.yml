@@ -1,2 +1,8 @@
 gems:
   - rspec-rails: ">= 6.0, < 9.0"
+skills:
+  martian-spec:
+    conditional:
+      references/data-setup.md: { gem: test-prof }
+      references/profiling.md: { gem: test-prof }
+      references/structure.md: { gem: test-prof }
