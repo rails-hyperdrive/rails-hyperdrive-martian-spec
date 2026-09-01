@@ -86,7 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `martian-spec` skill description: also triggers when implementing a new
   feature or fixing a bug, not only when touching spec files directly.
 
-[Unreleased]: https://github.com/izhanov/rails-hyperdrive-martian-spec/compare/v0.3.1...HEAD
-[0.3.1]: https://github.com/izhanov/rails-hyperdrive-martian-spec/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/izhanov/rails-hyperdrive-martian-spec/releases/tag/v0.3.0
-[0.2.0]: https://github.com/izhanov/rails-hyperdrive-martian-spec/releases/tag/v0.2.0
+[Unreleased]: https://github.com/rails-hyperdrive/rails-hyperdrive-martian-spec/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/rails-hyperdrive/rails-hyperdrive-martian-spec/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/rails-hyperdrive/rails-hyperdrive-martian-spec/releases/tag/v0.3.0
+[0.2.0]: https://github.com/rails-hyperdrive/rails-hyperdrive-martian-spec/releases/tag/v0.2.0

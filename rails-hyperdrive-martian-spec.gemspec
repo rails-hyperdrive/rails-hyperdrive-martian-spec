@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
     model-invoked guide for writing RSpec specs in Rails projects. Installed lazily
     by `bin/rails hyperdrive:init` into `.claude/skills/martian-spec/SKILL.md`.
   DESC
-  spec.homepage    = "https://github.com/izhanov/rails-hyperdrive-martian-spec"
+  spec.homepage    = "https://github.com/rails-hyperdrive/rails-hyperdrive-martian-spec"
   spec.license     = "MIT"
   spec.required_ruby_version = ">= 3.2.0"
 
