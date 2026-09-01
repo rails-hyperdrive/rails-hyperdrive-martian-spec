@@ -7,10 +7,12 @@ skills:
       references/profiling.md: { gem: test-prof }
       references/structure.md: { gem: test-prof }
 commands:
-  fprof.md: { gem: test-prof }
-  event-prof.md: { gem: test-prof }
-  rd-prof.md: { gem: test-prof }
-  tps-prof.md: { gem: test-prof }
-  factory-default-prof.md: { gem: test-prof }
-  mem-prof.md: { gem: test-prof }
-  stack-prof.md: { gem: test-prof }
+  # Per-entry gem: REPLACES the gem-wide rspec-rails gate, so the profiler
+  # commands must re-state it: they need both RSpec and test-prof.
+  fprof.md: { gem: { all: [rspec-rails, test-prof] } }
+  event-prof.md: { gem: { all: [rspec-rails, test-prof] } }
+  rd-prof.md: { gem: { all: [rspec-rails, test-prof] } }
+  tps-prof.md: { gem: { all: [rspec-rails, test-prof] } }
+  factory-default-prof.md: { gem: { all: [rspec-rails, test-prof] } }
+  mem-prof.md: { gem: { all: [rspec-rails, test-prof] } }
+  stack-prof.md: { gem: { all: [rspec-rails, test-prof] } }
