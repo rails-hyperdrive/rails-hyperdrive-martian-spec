@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-01
+
+### Changed
+- Repository links (gemspec homepage and the derived `source_code_uri` /
+  `changelog_uri`, CHANGELOG compare links) point at the `rails-hyperdrive`
+  GitHub organization the repository moved to. No content changes.
+
 ## [0.3.1] - 2026-09-01
 
 ### Fixed
@@ -86,7 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `martian-spec` skill description: also triggers when implementing a new
   feature or fixing a bug, not only when touching spec files directly.
 
-[Unreleased]: https://github.com/rails-hyperdrive/rails-hyperdrive-martian-spec/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/rails-hyperdrive/rails-hyperdrive-martian-spec/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/rails-hyperdrive/rails-hyperdrive-martian-spec/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/rails-hyperdrive/rails-hyperdrive-martian-spec/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/rails-hyperdrive/rails-hyperdrive-martian-spec/releases/tag/v0.3.0
 [0.2.0]: https://github.com/rails-hyperdrive/rails-hyperdrive-martian-spec/releases/tag/v0.2.0
